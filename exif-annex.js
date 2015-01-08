@@ -10,15 +10,42 @@ function pad(s) {
     return s;
 }
 
+function setMetadata(path, date, cb) {
+    if (date) {
+        var settings = [
+            path,
+            "-s", "year=" + date.getFullYear(),
+            "-s", "month=" + pad(date.getMonth() + 1),
+            "-s", "day=" + pad(date.getDate()),
+            "-s", "date=" + date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate())
+        ];
+        child_process.execFile("/usr/bin/env", ["git-annex", "metadata"].concat(settings),function (err, stdout, stderr) {
+            if (stderr) {
+                console.error(stderr.toString());
+            }
+            if (err) {
+                console.error(err.message);
+            }
+            
+            cb(err);
+        });
+    } else {
+        cb();
+    }
+}
+
 var pendingPaths = ["."];
 var running = 0;
-var cpus = os.cpus().length;
+var cpus = 4 * os.cpus().length;
 
 function go() {
     running++;
     var path = pendingPaths.shift();
     if (!path) {
         running--;
+        if (running < 1) {
+            flushMetadata();
+        }
         return;
     }
 
@@ -67,26 +94,8 @@ function go() {
                 } catch (e) {
                     console.error(e.stack || e.message);
                 }
-                
-                if (date) {
-                    // ?= updates, += overwrites
-                    child_process.execFile("/usr/bin/env", ["git-annex", "metadata", path,
-                                                            "-s", "year?=" + date.getFullYear(),
-                                                            "-s", "month?=" + date.getFullYear() + "-" + pad(date.getMonth() + 1),
-                                                            "-s", "date?=" + date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate())
-                                                           ], function (err, stdout, stderr) {
-                                                               if (stderr) {
-                                                                   console.error(stderr.toString());
-                                                               }
-                                                               if (err) {
-                                                                   console.error(path + ": " + err.message);
-                                                               }
-                                                               go();
-                                                           });
-                } else {
-                    console.log(pendingPaths.length + " to go");
-                    go();
-                }
+
+                setMetadata(path, date, go);
             });
         } else {
             go();
