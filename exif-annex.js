@@ -10,16 +10,16 @@ function pad(s) {
     return s;
 }
 
-function setMetadata(path, date, cb) {
-    if (date) {
-        var settings = [
-            path,
-            "-s", "year=" + date.getFullYear(),
-            "-s", "month=" + pad(date.getMonth() + 1),
-            "-s", "day=" + pad(date.getDate()),
-            "-s", "date=" + date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate())
-        ];
-        child_process.execFile("/usr/bin/env", ["git-annex", "metadata"].concat(settings),function (err, stdout, stderr) {
+function setMetadata(path, metadata, cb) {
+    var settings = [];
+    if (metadata) {
+        Object.keys(metadata).forEach(function(key) {
+            settings.push("-s", key + "=" + settings[key]);
+        });
+    }
+
+    if (settings.length > 0) {
+        child_process.execFile("/usr/bin/env", ["git-annex", "metadata", path].concat(settings),function (err, stdout, stderr) {
             if (stderr) {
                 console.error(stderr.toString());
             }
@@ -36,7 +36,7 @@ function setMetadata(path, date, cb) {
 
 var pendingPaths = ["."];
 var running = 0;
-var cpus = 4 * os.cpus().length;
+var cpus = 2 * os.cpus().length;
 
 function go() {
     running++;
@@ -79,23 +79,54 @@ function go() {
                     return go();
                 }
 
-                var date;
+                var metadata = {};
                 try {
                     var json = JSON.parse(stdout);
                     (json.packets_and_frames || []).forEach(function(json1) {
+                        var tags;
                         var m;
-                        if (json1.tags && json1.tags.DateTime &&
-                            (m = json1.tags.DateTime.match(/^(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/))) {
+                        if ((tags = json1.tags)) {
+                            if (tags.DateTime &&
+                                (m = tags.DateTime.match(/^(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/))) {
 
-                            date = new Date(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
+                                metadata.year = m[1];
+                                metadata.month = m[2];
+                                metadata.day = m[3];
+                                metadata.date = m[1] + "-" + m[2] + "-" + m[3];
+                            }
+                            if (tags.Model) {
+                                metadata.model = tags.Model;
+                            }
+                            if (tags['0xA434']) {
+                                metadata.objective = tags['0xA434'];
+                            }
+                            if (tags.ISOSpeedRatings) {
+                                metadata.iso = Number(tags.ISOSpeedRatings);
+                            }
+                            if (tags.ExposureTime &&
+                                (m = tags.ExposureTime.match(/(\d+):(\d+)/))) {
+                                metadata.exposure = Number(m[1]) / Number(m[2]);
+                            }
+                            if (tags.FNumber &&
+                                (m = tags.FNumber.match(/(\d+):(\d+)/))) {
+                                metadata.f = Number(m[1]) / Number(m[2]);
+                            }
+                            if (tags.ApertureValue &&
+                                (m = tags.ApertureValue.match(/(\d+):(\d+)/))) {
+                                metadata.aperture = Number(m[1]) / Number(m[2]);
+                            }
+                            if (tags.ShutterSpeedValue &&
+                                (m = tags.ShutterSpeedValue.match(/(\d+):(\d+)/))) {
+                                metadata.shutter = Number(m[1]) / Number(m[2]);
+                            }
                         }
                     });
-                    console.log(path, date);
+                    console.log(path, metadata);
                 } catch (e) {
                     console.error(e.stack || e.message);
                 }
 
-                setMetadata(path, date, go);
+                setMetadata(path, metadata, go);
             });
         } else {
             go();
