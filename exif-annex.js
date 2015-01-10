@@ -14,7 +14,7 @@ function setMetadata(path, metadata, cb) {
     var settings = [];
     if (metadata) {
         Object.keys(metadata).forEach(function(key) {
-            settings.push("-s", key + "=" + settings[key]);
+            settings.push("-s", key + "=" + metadata[key]);
         });
     }
 
