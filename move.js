@@ -43,7 +43,7 @@ if (process.argv.length != 4) {
 var pendingPaths = [process.argv[2]];
 var targetDir = process.argv[3];
 var running = 0;
-var cpus = 2 * os.cpus().length;
+var cpus = os.cpus().length;
 
 function go() {
     running++;
@@ -76,7 +76,7 @@ function go() {
                 });
                 return go();
             });
-        } else if (/\.jpe?g$/i.test(path)) {
+        } else if (/\.jpe?g$/i.test(path) || /\.nef$/i.test(path)) {
             child_process.execFile("/usr/bin/env", ["ffprobe", "-loglevel", "quiet", "-print_format", "json", "-show_frames", path], function (err, stdout, stderr) {
                 if (stderr) {
                     console.error(stderr.toString());
@@ -91,9 +91,10 @@ function go() {
                     var json = JSON.parse(stdout);
                     var tagsList = findTags(json);
                     tagsList.forEach(function(tags) {
+                        var d;
                         var m;
-                        if (tags.DateTime &&
-                            (m = tags.DateTime.match(/^(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/))) {
+                        if ((d = (tags.DateTime || tags.date || tags.DateTimeOriginal)) &&
+                            (m = d.match(/^(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/))) {
 
                             date = [m[1], m[2], m[3]];
                         }
@@ -102,7 +103,7 @@ function go() {
                         var target = [targetDir].concat(date, "").join("/");
                         child_process.execFile("/usr/bin/env", ["mkdir", "-p", target], function() {
                             console.log("mv " + path + " " + target);
-                            child_process.execFile("/usr/bin/env", ["mv", path, target], go);
+                            child_process.execFile("/usr/bin/env", ["mv", "-i", path, target], go);
                         });
                     } else {
                         console.log("No date for " + path);
@@ -114,6 +115,7 @@ function go() {
                 }
             });
         } else {
+            // TODO: *.MOV with -show_format (creation_time is :-separated)
             go();
         }
     });
