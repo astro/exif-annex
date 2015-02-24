@@ -3,6 +3,10 @@ var fs = require('fs');
 var os = require('os');
 var child_process = require('child_process');
 
+process.on('uncaughtException', function(e) {
+    console.error(e.stack)
+});
+
 function pad(s) {
     s = s.toString();
     while(s.length < 2) {
@@ -35,6 +39,36 @@ function findTags(a) {
     return result;
 }
 
+function ffprobe(what, path, cb) {
+    child_process.execFile("/usr/bin/env", ["ffprobe", "-loglevel", "quiet", "-print_format", "json", what, path], {
+        maxBuffer: 2 * 1024 * 1024
+    }, function (err, stdout, stderr) {
+        if (stderr) {
+            console.error(stderr.toString());
+        }
+        if (err) {
+            console.error(path + ": " + err.message);
+        }
+        var json = JSON.parse(stdout);
+        cb(err, json);
+    });
+}
+
+function mv(path, target, cb) {
+    child_process.execFile("/usr/bin/env", ["mkdir", "-p", target], function() {
+        console.log("mv " + path + " " + target);
+        child_process.execFile("/usr/bin/env", ["mv", "-n", path, target], function (err, stdout, stderr) {
+            if (stderr) {
+                console.error(stderr.toString());
+            }
+            if (err) {
+                console.error(path + ": " + err.message);
+            }
+            cb(err);
+        });
+    });
+}
+
 if (process.argv.length != 4) {
     console.log("Usage: " + process.argv[0] + " " + process.argv[1] + " <source-dir> <target-base-dir>");
     process.exit(1);
@@ -52,21 +86,29 @@ function go() {
         running--;
         if (running < 1) {
             // All done!
+            console.log("All done");
         }
         return;
+    }
+    function next(err) {
+        if (err) {
+            console.error(path + ": " + err.message);
+        }
+        running--;
+        go();
     }
 
     fs.stat(path, function (err, stats) {
         if (err) {
             console.error(path + ": " + err.message);
-            return go();
+            return next();
         }
 
         if (stats.isDirectory()) {
             fs.readdir(path, function (err, files) {
                 if (err) {
                     console.error(path + ": " + err.message);
-                    return go();
+                    return next();
                 }
 
                 files.forEach(function(file) {
@@ -74,49 +116,60 @@ function go() {
                         pendingPaths.push(path + "/" + file);
                     }
                 });
-                return go();
+                return next();
             });
         } else if (/\.jpe?g$/i.test(path) || /\.nef$/i.test(path)) {
-            child_process.execFile("/usr/bin/env", ["ffprobe", "-loglevel", "quiet", "-print_format", "json", "-show_frames", path], function (err, stdout, stderr) {
-                if (stderr) {
-                    console.error(stderr.toString());
-                }
+            ffprobe("-show_frames", path, function (err, json) {
                 if (err) {
-                    console.error(path + ": " + err.message);
-                    return go();
+                    return next();
                 }
 
-                try {
-                    var date;
-                    var json = JSON.parse(stdout);
-                    var tagsList = findTags(json);
-                    tagsList.forEach(function(tags) {
-                        var d;
-                        var m;
-                        if ((d = (tags.DateTime || tags.date || tags.DateTimeOriginal)) &&
-                            (m = d.match(/^(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/))) {
+                var date;
+                var tagsList = findTags(json);
+                tagsList.forEach(function(tags) {
+                    var d;
+                    var m;
+                    if ((d = (tags.DateTime || tags.date || tags.DateTimeOriginal)) &&
+                        (m = d.match(/^(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/))) {
 
-                            date = [m[1], m[2], m[3]];
-                        }
-                    });
-                    if (date) {
-                        var target = [targetDir].concat(date, "").join("/");
-                        child_process.execFile("/usr/bin/env", ["mkdir", "-p", target], function() {
-                            console.log("mv " + path + " " + target);
-                            child_process.execFile("/usr/bin/env", ["mv", "-i", path, target], go);
-                        });
-                    } else {
-                        console.log("No date for " + path);
-                        go();
+                        date = [m[1], m[2], m[3]];
                     }
-                } catch (e) {
-                    console.error(path + "\n" + (e.stack || e.message));
-                    go();
+                });
+                if (date) {
+                    var target = [targetDir].concat(date, "").join("/");
+                    mv(path, target, next);
+                } else {
+                    console.log("No date for " + path);
+                    next();
+                }
+            });
+        } else if (/\.mp4$/i.test(path) || /\.mov$/i.test(path) || /\.m4v$/i.test(path)) {
+            ffprobe("-show_format", path, function (err, json) {
+                if (err) {
+                    return next();
+                }
+
+                var date;
+                var tagsList = findTags(json);
+                tagsList.forEach(function(tags) {
+                    var d;
+                    var m;
+                    if ((d = tags.creation_time) &&
+                        (m = d.match(/^(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)/))) {
+
+                        date = [m[1], m[2], m[3]];
+                    }
+                });
+                if (date) {
+                    var target = [targetDir].concat(date, "").join("/");
+                    mv(path, target, next);
+                } else {
+                    console.log("No date for " + path);
+                    next();
                 }
             });
         } else {
-            // TODO: *.MOV with -show_format (creation_time is :-separated)
-            go();
+            next();
         }
     });
 
