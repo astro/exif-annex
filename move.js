@@ -67,8 +67,8 @@ function exiv2(path, cb) {
             try {
                 var m = stdout.match(/Image timestamp\s*: (\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/);
                 result = {
-                    date: [Number(m[1]), Number(m[2]), Number(m[3])],
-                    time: [Number(m[4]), Number(m[5]), Number(m[6])]
+                    date: [m[1], m[2], m[3]],
+                    time: [m[4], m[5], m[6]]
                 };
             } catch(e) {
                 err = e;
