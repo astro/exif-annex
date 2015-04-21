@@ -84,7 +84,7 @@ function exiv2(path, cb) {
 function cp(path, target, cb) {
     child_process.execFile("/usr/bin/env", ["mkdir", "-p", target], function() {
         console.log("cp " + path + " " + target);
-        child_process.execFile("/usr/bin/env", ["cp", "-n", path, target], function (err, stdout, stderr) {
+        child_process.execFile("/usr/bin/env", ["cp", "-u", path, target], function (err, stdout, stderr) {
             if (stderr) {
                 console.error(stderr.toString());
             }
