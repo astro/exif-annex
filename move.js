@@ -81,10 +81,10 @@ function exiv2(path, cb) {
     });
 }
 
-function mv(path, target, cb) {
+function cp(path, target, cb) {
     child_process.execFile("/usr/bin/env", ["mkdir", "-p", target], function() {
-        console.log("mv " + path + " " + target);
-        child_process.execFile("/usr/bin/env", ["mv", "-n", path, target], function (err, stdout, stderr) {
+        console.log("cp " + path + " " + target);
+        child_process.execFile("/usr/bin/env", ["cp", "-n", path, target], function (err, stdout, stderr) {
             if (stderr) {
                 console.error(stderr.toString());
             }
@@ -160,7 +160,7 @@ function go() {
 
                 if (info.date) {
                     var target = [targetDir].concat(info.date, "").join("/");
-                    mv(path, target, next);
+                    cp(path, target, next);
                 } else {
                     console.log("No date for " + path);
                     next();
@@ -185,7 +185,7 @@ function go() {
                 });
                 if (date) {
                     var target = [targetDir].concat(date, "").join("/");
-                    mv(path, target, next);
+                    cp(path, target, next);
                 } else {
                     console.log("No date for " + path);
                     next();
