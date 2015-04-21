@@ -54,6 +54,33 @@ function ffprobe(what, path, cb) {
     });
 }
 
+function exiv2(path, cb) {
+    console.log("exiv2", path);
+    child_process.execFile("/usr/bin/env", ["exiv2", path], {
+        maxBuffer: 2 * 1024 * 1024
+    }, function (err, stdout, stderr) {
+        var result;
+        if (stderr) {
+            console.error(stderr.toString());
+        }
+        if (!err) {
+            try {
+                var m = stdout.match(/Image timestamp\s*: (\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/);
+                result = {
+                    date: [Number(m[1]), Number(m[2]), Number(m[3])],
+                    time: [Number(m[4]), Number(m[5]), Number(m[6])]
+                };
+            } catch(e) {
+                err = e;
+            }
+        }
+        if (err) {
+            console.error(path + ": " + err.message);
+        }
+        cb(err, result);
+    });
+}
+
 function mv(path, target, cb) {
     child_process.execFile("/usr/bin/env", ["mkdir", "-p", target], function() {
         console.log("mv " + path + " " + target);
@@ -119,24 +146,13 @@ function go() {
                 return next();
             });
         } else if (/\.jpe?g$/i.test(path) || /\.nef$/i.test(path)) {
-            ffprobe("-show_frames", path, function (err, json) {
+            exiv2(path, function (err, info) {
                 if (err) {
                     return next();
                 }
 
-                var date;
-                var tagsList = findTags(json);
-                tagsList.forEach(function(tags) {
-                    var d;
-                    var m;
-                    if ((d = (tags.DateTime || tags.date || tags.DateTimeOriginal)) &&
-                        (m = d.match(/^(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/))) {
-
-                        date = [m[1], m[2], m[3]];
-                    }
-                });
-                if (date) {
-                    var target = [targetDir].concat(date, "").join("/");
+                if (info.date) {
+                    var target = [targetDir].concat(info.date, "").join("/");
                     mv(path, target, next);
                 } else {
                     console.log("No date for " + path);
